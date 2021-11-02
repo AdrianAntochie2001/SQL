@@ -1,0 +1,317 @@
+---FILE CREATO SOLAMENTE PER FAR VEDERE I PACKAGE
+---I FILE SONO TOTALMENTE IGNORATI
+
+
+
+CREATE OR REPLACE NONEDITIONABLE PACKAGE BODY "DBUSER"."ARTICOLO" AS
+
+    --Corpo della procedure inserici articolo
+    PROCEDURE inserisciarticolo (
+        codart_i       IN  articoli.codart%TYPE,
+        descrizione_i  IN  articoli.descrizione%TYPE,
+        um_i           IN  articoli.um%TYPE,
+        codstat_i      IN  articoli.codstat%TYPE,
+        pzcart_i       IN  articoli.pzcart%TYPE,
+        pesonetto_i    IN  articoli.pesonetto%TYPE,
+        idiva_i        IN  articoli.idiva%TYPE,
+        idstato_i      IN  articoli.idstatoart%TYPE,
+        idfamass_i     IN  articoli.idfamass%TYPE
+    ) IS
+        v_ifexists BOOLEAN;
+    BEGIN
+        v_ifexists := isartpresent(codart_i);
+        IF v_ifexists = true THEN
+            UPDATE articoli
+            SET
+                descrizione = descrizione_i,
+                um = um_i,
+                codstat = codstat_i,
+                pzcart = pzcart_i,
+                pesonetto = pesonetto_i,
+                idiva = idiva_i,
+                idstatoart = idstato_i,
+                idfamass = idfamass_i
+            WHERE
+                codart = codart_i;
+
+        ELSE
+            INSERT INTO articoli VALUES (
+                codart_i,
+                descrizione_i,
+                um_i,
+                codstat_i,
+                pzcart_i,
+                pesonetto_i,
+                idiva_i,
+                idstato_i,
+                sysdate,
+                idfamass_i
+            );
+
+        END IF;
+
+    END inserisciarticolo;
+
+--CORPO DELLA FUNZIONE IsArtPresent   
+    FUNCTION isartpresent (
+        codart_i IN articoli.codart%TYPE
+    ) RETURN BOOLEAN IS
+        v_count_art NUMBER;
+    BEGIN
+        SELECT
+            COUNT(*)
+        INTO v_count_art
+        FROM
+            articoli
+        WHERE
+            codart = codart_i;
+
+        IF ( v_count_art > 0 ) THEN
+            RETURN true;
+        ELSE
+            RETURN false;
+        END IF;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RETURN false;
+    END isartpresent;
+
+--CORPO DELLA PROCEDURE CANCELLA ARTICOLO
+    PROCEDURE cancellaarticolo (
+        codart_i IN articoli.codart%TYPE
+    ) AS
+    BEGIN
+        DELETE FROM articoli
+        WHERE
+            codart_i = codart;
+
+    END cancellaarticolo;
+
+--CORPO DELLA FUNZIIONE PREZZO_ARTICOLO
+
+    FUNCTION prezzo_articolo (
+        v_codart  dettlistini.codart%TYPE,
+        v_idlist  dettlistini.idlist%TYPE
+    ) RETURN NUMBER AS
+
+        CURSOR c_przlist (
+            i_idlist  IN dettlistini.idlist%TYPE,
+            i_codart  IN dettlistini.codart%TYPE
+        ) IS
+        SELECT
+            prezzo
+        FROM
+            dettlistini
+        WHERE
+            codart = i_codart
+            AND idlist = i_idlist;
+
+        v_retval NUMBER;
+    BEGIN
+        OPEN c_przlist(
+                      v_idlist,
+                      v_codart
+             );
+        FETCH c_przlist INTO v_retval;
+        IF c_przlist%notfound THEN
+            CLOSE c_przlist;
+            RETURN NULL;
+        ELSE
+            CLOSE c_przlist;
+            RETURN v_retval;
+        END IF;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF c_przlist%isopen THEN
+                CLOSE c_przlist;
+            END IF;
+            COMMIT;
+    END prezzo_articolo;
+
+--Corpo della procedura premio_fidelity
+    PROCEDURE premio_fidelity (
+        anno_i  IN  NUMBER,
+        mese_i  IN  NUMBER
+    ) AS
+
+        CURSOR c_bestcli (
+            v_meserif  NUMBER,
+            v_annorif  NUMBER
+        ) IS
+        SELECT DISTINCT
+            codfid
+        FROM
+            scontrini
+        WHERE
+            codfid <> '-1'
+            AND EXTRACT(YEAR FROM data) = v_annorif
+            AND EXTRACT(MONTH FROM data) = v_meserif
+        GROUP BY
+            codfid
+        HAVING
+            SUM(totale) >= 500;
+
+    BEGIN
+        FOR r_bestcli IN c_bestcli(
+                                  mese_i,
+                                  anno_i
+                         ) LOOP
+            UPDATE cards_temp
+            SET
+                bollini = bollini + 500
+            WHERE
+                codfidelity = r_bestcli.codfid;
+
+            dbms_output.put_line('Aggiunti 500 Punti alla Fidelity: '
+                                 || r_bestcli.codfid
+                                 || '.');
+        END LOOP;
+
+        COMMIT;
+    END premio_fidelity;
+
+    --Corpo della procedura coupon_fidelity
+
+    PROCEDURE coupon_fidelity (
+        numspese_i  IN  NUMBER,
+        mese_i      IN  NUMBER
+    ) AS
+
+        valspesa_fasca  CONSTANT NUMBER := 800;
+        qtacoup_fasca   CONSTANT NUMBER := 5;
+        valspesa_fascb  CONSTANT NUMBER := 500;
+        qtacoup_fascb   CONSTANT NUMBER := 3;
+        valspesa_fascc  CONSTANT NUMBER := 200;
+        qtacoup_fascc   CONSTANT NUMBER := 1;
+
+--Creazione Cursore: I migliori n clienti
+        CURSOR c_bestcli IS
+        SELECT
+            aa.*
+        FROM
+            (
+                SELECT
+                    codfid,
+                    totvend,
+                    qtaspese,
+                    mese
+                FROM
+                    vw_speseclifid
+                WHERE
+                    codfid <> '-1'
+                    AND mese = mese_i
+            ) aa
+        WHERE
+            ROWNUM <= numspese_i;
+
+    BEGIN
+        DELETE FROM coupons
+        WHERE
+            mese = mese_i + 1;
+
+        FOR r_bestcli IN c_bestcli LOOP
+            IF r_bestcli.totvend >= valspesa_fasca THEN
+                INSERT INTO coupons VALUES (
+                    to_char(
+                        sysdate, 'YYYY'
+                    ),
+                    r_bestcli.mese + 1,
+                    r_bestcli.codfid,
+                    qtacoup_fasca
+                );
+
+            ELSIF
+                r_bestcli.totvend >= valspesa_fascb
+                AND r_bestcli.totvend < valspesa_fasca
+            THEN
+                INSERT INTO coupons VALUES (
+                    to_char(
+                        sysdate, 'YYYY'
+                    ),
+                    r_bestcli.mese + 1,
+                    r_bestcli.codfid,
+                    qtacoup_fascb
+                );
+
+            ELSIF
+                r_bestcli.totvend >= valspesa_fascc
+                AND r_bestcli.totvend < valspesa_fascb
+            THEN
+                INSERT INTO coupons VALUES (
+                    to_char(
+                        sysdate, 'YYYY'
+                    ),
+                    r_bestcli.mese + 1,
+                    r_bestcli.codfid,
+                    qtacoup_fascc
+                );
+
+            END IF;
+        END LOOP;
+
+        COMMIT;
+        dbms_output.put_line('Creazione Coupon Eseguita con Successo');
+    EXCEPTION
+        WHEN no_data_found THEN
+            dbms_output.put_line('Non è stato trovato alcun cliente con i criteri ricercati');
+    END coupon_fidelity;
+
+--CORPO DELLA FUNZIONE FATTURAZIONE ARTICOLO
+    FUNCTION fatturazione_articolo (
+        codart_i   articoli.codart%TYPE,
+        tipo_vend  NUMBER
+    ) -- 1 = Totale; 2 = Normale; 3 = Promo 
+     RETURN NUMBER AS
+        v_retval NUMBER;
+    BEGIN
+        IF tipo_vend = 3 THEN
+            SELECT
+                nvl(
+                    SUM(qta * prezzo), 0
+                )
+            INTO v_retval
+            FROM
+                dettscontrini
+            WHERE
+                codart = codart_i
+                AND inpromo = 'Si';
+
+        ELSIF tipo_vend = 2 THEN
+            SELECT
+                nvl(
+                    SUM(qta * prezzo), 0
+                )
+            INTO v_retval
+            FROM
+                dettscontrini
+            WHERE
+                codart = codart_i
+                AND inpromo = 'No';
+
+        ELSE
+            SELECT
+                nvl(
+                    SUM(qta * prezzo), 0
+                )
+            INTO v_retval
+            FROM
+                dettscontrini
+            WHERE
+                codart = codart_i;
+
+        END IF;
+
+        RETURN v_retval;
+    EXCEPTION
+        WHEN no_data_found THEN
+            RETURN ( 0 );
+            dbms_output.put_line('Articolo non trovato o non venduto');
+        WHEN OTHERS THEN
+            RETURN ( -1 );
+            dbms_output.put_line('Errore Esecuzione Uf_GetPrzArt');
+    END;
+
+END articolo;
+
+/

@@ -1,0 +1,50 @@
+ ---FILE CREATO SOLAMENTE PER FAR VEDERE I PACKAGE
+---I FILE SONO TOTALMENTE IGNORATI
+ 
+ 
+ 
+ CREATE OR REPLACE NONEDITIONABLE PACKAGE "DBUSER"."ARTICOLO" AS
+    PROCEDURE inserisciarticolo (
+        codart_i       IN  articoli.codart%TYPE,
+        descrizione_i  IN  articoli.descrizione%TYPE,
+        um_i           IN  articoli.um%TYPE,
+        codstat_i      IN  articoli.codstat%TYPE,
+        pzcart_i       IN  articoli.pzcart%TYPE,
+        pesonetto_i    IN  articoli.pesonetto%TYPE,
+        idiva_i        IN  articoli.idiva%TYPE,
+        idstato_i      IN  articoli.idstatoart%TYPE,
+        idfamass_i     IN  articoli.idfamass%TYPE
+    );
+
+    FUNCTION isartpresent (
+        codart_i IN articoli.codart%TYPE
+    ) RETURN BOOLEAN;
+
+    PROCEDURE cancellaarticolo (
+        codart_i IN articoli.codart%TYPE
+    );
+
+    FUNCTION prezzo_articolo (
+        v_codart  dettlistini.codart%TYPE,
+        v_idlist  dettlistini.idlist%TYPE
+    ) RETURN NUMBER;
+
+    PROCEDURE premio_fidelity (
+        anno_i  IN  NUMBER,
+        mese_i  IN  NUMBER
+    );
+
+    PROCEDURE coupon_fidelity (
+        numspese_i  IN  NUMBER,
+        mese_i      IN  NUMBER
+    );
+
+    FUNCTION fatturazione_articolo (
+        codart_i   articoli.codart%TYPE,
+        tipo_vend  NUMBER
+    ) -- 1 = Totale; 2 = Normale; 3 = Promo 
+     RETURN NUMBER;
+
+END articolo;
+
+/
